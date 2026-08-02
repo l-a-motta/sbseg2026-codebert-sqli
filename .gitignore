@@ -1,0 +1,14 @@
+# Data and models are rebuilt locally, never committed (see code/datasets/SOURCES.md)
+code/datasets/raw/
+code/datasets/compiled/
+code/fine-tuning/models/
+
+# Run outputs
+code/*/logs/
+code/eval/results/
+code/comparison/output/
+
+# Python
+__pycache__/
+*.pyc
+.venv/

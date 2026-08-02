@@ -1,0 +1,10 @@
+# Tested with Python 3.11+ on Windows 11 and Google Colab (Ubuntu).
+# Versions below are the ones used for the local evaluation runs;
+# nearby versions are expected to work.
+pandas==3.0.2
+numpy==2.4.4
+scikit-learn==1.8.0
+torch==2.11.0
+transformers==5.8.0
+matplotlib==3.10.9
+psutil==7.2.2
