@@ -17,10 +17,13 @@
 # Results are appended to the same evaluation_results.csv as evaluate.py, with
 # model_id suffix "-probe" so the scoreboard distinguishes before/after course.
 #
-# For a quick end-to-end validation, point DATASET_PATH at the committed
-# fixture (code/datasets/fixture/fixture_dataset.csv), RESULTS_DIR at a scratch
-# folder, and lower PROBE_TRAIN_ROWS. See docs/RUNBOOK.md.
+# The configuration constants below are defaults; every one of them can be
+# overridden from the command line without editing this file (see --help).
+# For a quick end-to-end validation, pass the committed fixture
+# (--dataset-path code/datasets/fixture/fixture_dataset.csv), a scratch
+# --results-dir, and a lower --probe-train-rows. See docs/RUNBOOK.md.
 
+import argparse
 import logging
 import sys
 import time
@@ -60,6 +63,42 @@ RANDOM_SEED      = 42
 
 LOG_INTERVAL_SECONDS = 150
 LOG_DIR              = Path("code/eval/logs")
+
+# ── Command-line overrides ────────────────────────────────────────────────────
+# The constants above are the defaults used in the article; each flag below
+# overrides one of them for a single run, so no source edit is ever required.
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stage 3 — linear probes for the untuned encoders (PP6, D3.7).",
+    )
+    parser.add_argument("--dataset-path", default=DATASET_PATH,
+                        help=f"compiled dataset CSV (default: {DATASET_PATH})")
+    parser.add_argument("--results-dir", default=str(RESULTS_DIR),
+                        help=f"output directory for prediction CSVs and "
+                             f"evaluation_results.csv (default: {RESULTS_DIR})")
+    parser.add_argument("--probe-train-rows", default=PROBE_TRAIN_ROWS, type=int,
+                        help="training-split subsample used to fit the probe "
+                             f"(default: {PROBE_TRAIN_ROWS})")
+    parser.add_argument("--batch-size", default=BATCH_SIZE, type=int,
+                        help=f"embedding batch size (default: {BATCH_SIZE})")
+    parser.add_argument("--seed", default=RANDOM_SEED, type=int,
+                        help=f"random seed (default: {RANDOM_SEED})")
+    parser.add_argument("--log-dir", default=str(LOG_DIR),
+                        help=f"directory for the DEBUG-level log file (default: {LOG_DIR})")
+    return parser.parse_args()
+
+
+def apply_args(args):
+    """Overwrite the configuration globals with the parsed command-line values."""
+    global DATASET_PATH, RESULTS_DIR, PROBE_TRAIN_ROWS, BATCH_SIZE, RANDOM_SEED, LOG_DIR
+    DATASET_PATH     = args.dataset_path
+    RESULTS_DIR      = Path(args.results_dir)
+    PROBE_TRAIN_ROWS = args.probe_train_rows
+    BATCH_SIZE       = args.batch_size
+    RANDOM_SEED      = args.seed
+    LOG_DIR          = Path(args.log_dir)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -263,4 +302,5 @@ def main():
 
 
 if __name__ == "__main__":
+    apply_args(parse_args())
     main()

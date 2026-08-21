@@ -17,7 +17,12 @@
 #
 # Large files (dataset.csv ~1 GB, rbsqli_dataset.csv ~1.3 GB) are streamed
 # in chunks. The raw files are never modified.
+#
+# The configuration constants below are defaults; the input/output directories,
+# seed and row filters can be overridden from the command line without editing
+# this file (see --help): e.g. --raw-dir <dir> --output-dir <dir> --seed <n>.
 
+import argparse
 import hashlib
 import logging
 import sys
@@ -73,6 +78,41 @@ FEATURES_RENAME = {
 # Sentinel used in dict keys when label is NaN, so the (source, label) tuple
 # remains hashable and equal across uses.
 NAN_LABEL_KEY = "__NAN__"
+
+
+# ── Command-line overrides ────────────────────────────────────────────────────
+# The constants above are the defaults used in the article; each flag below
+# overrides one of them for a single run, so no source edit is ever required.
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stage 1 — compile the unified SQLi corpus from the raw sources.",
+    )
+    parser.add_argument("--raw-dir", default=str(RAW_DIR),
+                        help=f"directory holding the raw source CSVs (default: {RAW_DIR})")
+    parser.add_argument("--output-dir", default=str(OUTPUT_DIR),
+                        help=f"directory for the compiled CSVs (default: {OUTPUT_DIR})")
+    parser.add_argument("--seed", default=RANDOM_SEED, type=int,
+                        help=f"random seed for the stratified split (default: {RANDOM_SEED})")
+    parser.add_argument("--min-query-length", default=MIN_QUERY_LENGTH, type=int,
+                        help=f"drop rows with queries shorter than this (default: {MIN_QUERY_LENGTH})")
+    parser.add_argument("--chunk-size", default=CHUNK_SIZE, type=int,
+                        help=f"rows per streaming chunk (default: {CHUNK_SIZE})")
+    parser.add_argument("--log-dir", default=str(LOG_DIR),
+                        help=f"directory for the DEBUG-level log file (default: {LOG_DIR})")
+    return parser.parse_args()
+
+
+def apply_args(args):
+    """Overwrite the configuration globals with the parsed command-line values."""
+    global RAW_DIR, OUTPUT_DIR, RANDOM_SEED, MIN_QUERY_LENGTH, CHUNK_SIZE, LOG_DIR
+    RAW_DIR          = Path(args.raw_dir)
+    OUTPUT_DIR       = Path(args.output_dir)
+    RANDOM_SEED      = args.seed
+    MIN_QUERY_LENGTH = args.min_query_length
+    CHUNK_SIZE       = args.chunk_size
+    LOG_DIR          = Path(args.log_dir)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -535,4 +575,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    apply_args(parse_args())
     main()

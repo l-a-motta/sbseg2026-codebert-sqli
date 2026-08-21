@@ -13,11 +13,15 @@
 # Features: 18 hand-crafted features matching the SQLI_Dataset.csv schema (D3.5).
 # Output: per-row prediction CSVs and rows appended to evaluation_results.csv.
 #
-# Set MAX_TRAIN_ROWS to cap the training set (recommended: match Stage A size).
-# For a quick end-to-end validation, point DATASET_PATH at the committed
-# fixture (code/datasets/fixture/fixture_dataset.csv) and RESULTS_DIR at a
-# scratch folder. See docs/RUNBOOK.md.
+# The configuration constants below are defaults; every one of them can be
+# overridden from the command line without editing this file (see --help):
+#   python code/eval/evaluate_baselines.py --dataset-path <csv> --results-dir <dir> \
+#       --max-train-rows <n|all> --seed <n>
+# For a quick end-to-end validation, pass the committed fixture
+# (--dataset-path code/datasets/fixture/fixture_dataset.csv) and a scratch
+# --results-dir — same code path, miniature data. See docs/RUNBOOK.md.
 
+import argparse
 import logging
 import math
 import re
@@ -62,6 +66,47 @@ _LOGICAL_OP   = re.compile(r"\b(AND|OR|NOT)\b", re.IGNORECASE)
 _OPERATOR     = re.compile(r"(!=|<>|<=|>=|=|<|>)")
 _COMMENT      = re.compile(r"(--|/\*)")
 _NULL         = re.compile(r"\bNULL\b", re.IGNORECASE)
+
+# ── Command-line overrides ────────────────────────────────────────────────────
+# The constants above are the defaults used in the article; each flag below
+# overrides one of them for a single run, so no source edit is ever required.
+
+
+def parse_rows_cap(value):
+    """argparse type: a positive integer, or 'all'/'none' meaning no cap."""
+    if str(value).lower() in ("all", "none"):
+        return None
+    return int(value)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stage 3 — ML baseline evaluation "
+                    "(Logistic Regression, Random Forest, Linear SVM).",
+    )
+    parser.add_argument("--dataset-path", default=DATASET_PATH,
+                        help=f"compiled dataset CSV (default: {DATASET_PATH})")
+    parser.add_argument("--results-dir", default=str(RESULTS_DIR),
+                        help=f"output directory for prediction CSVs and "
+                             f"evaluation_results.csv (default: {RESULTS_DIR})")
+    parser.add_argument("--max-train-rows", default=MAX_TRAIN_ROWS, type=parse_rows_cap,
+                        help="cap on training rows, or 'all' for no cap "
+                             f"(default: {MAX_TRAIN_ROWS})")
+    parser.add_argument("--seed", default=RANDOM_SEED, type=int,
+                        help=f"random seed (default: {RANDOM_SEED})")
+    parser.add_argument("--log-dir", default=str(LOG_DIR),
+                        help=f"directory for the DEBUG-level log file (default: {LOG_DIR})")
+    return parser.parse_args()
+
+
+def apply_args(args):
+    """Overwrite the configuration globals with the parsed command-line values."""
+    global DATASET_PATH, RESULTS_DIR, MAX_TRAIN_ROWS, RANDOM_SEED, LOG_DIR
+    DATASET_PATH   = args.dataset_path
+    RESULTS_DIR    = Path(args.results_dir)
+    MAX_TRAIN_ROWS = args.max_train_rows
+    RANDOM_SEED    = args.seed
+    LOG_DIR        = Path(args.log_dir)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -328,8 +373,9 @@ def main():
     logging.info(f"  Training time: {time.perf_counter()-t0:.1f}s")
     evaluate_baseline("svm_linear", svm, X_test, test_df)
 
-    logging.info("\nAll baselines evaluated. Results in code/eval/results/")
+    logging.info("\nAll baselines evaluated. Results in " + str(RESULTS_DIR))
 
 
 if __name__ == "__main__":
+    apply_args(parse_args())
     main()

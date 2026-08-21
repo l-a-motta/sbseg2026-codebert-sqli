@@ -18,10 +18,14 @@
 # Reuses SQLiDataset and compute_metrics from train.py (same sliding-window
 # strategy and majority-vote aggregation used during training).
 #
-# For a quick end-to-end validation, point DATASET_PATH at the committed
-# fixture (code/datasets/fixture/fixture_dataset.csv) and RESULTS_DIR at a
-# scratch folder — same code path, miniature data. See docs/RUNBOOK.md.
+# The configuration constants below are defaults; every one of them can be
+# overridden from the command line without editing this file (see --help),
+# including the model list: --model <id>=<path>, repeatable.
+# For a quick end-to-end validation, pass the committed fixture
+# (--dataset-path code/datasets/fixture/fixture_dataset.csv) and a scratch
+# --results-dir — same code path, miniature data. See docs/RUNBOOK.md.
 
+import argparse
 import logging
 import sys
 import time
@@ -62,6 +66,49 @@ RANDOM_SEED      = 42
 
 LOG_INTERVAL_SECONDS = 150   # progress line every ~2.5 minutes
 LOG_DIR              = Path("code/eval/logs")
+
+# ── Command-line overrides ────────────────────────────────────────────────────
+# The constants above are the defaults used in the article; each flag below
+# overrides one of them for a single run, so no source edit is ever required.
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stage 3 — evaluate fine-tuned BERT-family models on the test split.",
+    )
+    parser.add_argument("--model", action="append", metavar="ID=PATH",
+                        help="model to evaluate, as <model_id>=<model_dir>; repeatable. "
+                             "Default: the three fine-tuned models of the article (D3.7)")
+    parser.add_argument("--dataset-path", default=DATASET_PATH,
+                        help=f"compiled dataset CSV (default: {DATASET_PATH})")
+    parser.add_argument("--results-dir", default=str(RESULTS_DIR),
+                        help=f"output directory for prediction CSVs and "
+                             f"evaluation_results.csv (default: {RESULTS_DIR})")
+    parser.add_argument("--batch-size", default=BATCH_SIZE, type=int,
+                        help=f"inference batch size (default: {BATCH_SIZE})")
+    parser.add_argument("--seed", default=RANDOM_SEED, type=int,
+                        help=f"random seed (default: {RANDOM_SEED})")
+    parser.add_argument("--log-dir", default=str(LOG_DIR),
+                        help=f"directory for the DEBUG-level log file (default: {LOG_DIR})")
+    args = parser.parse_args()
+
+    if args.model:
+        for spec in args.model:
+            if "=" not in spec:
+                parser.error(f"--model expects <model_id>=<model_dir>, got: {spec!r}")
+    return args
+
+
+def apply_args(args):
+    """Overwrite the configuration globals with the parsed command-line values."""
+    global MODELS, DATASET_PATH, RESULTS_DIR, BATCH_SIZE, RANDOM_SEED, LOG_DIR
+    if args.model:
+        MODELS = [tuple(spec.split("=", 1)) for spec in args.model]
+    DATASET_PATH = args.dataset_path
+    RESULTS_DIR  = Path(args.results_dir)
+    BATCH_SIZE   = args.batch_size
+    RANDOM_SEED  = args.seed
+    LOG_DIR      = Path(args.log_dir)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -319,8 +366,9 @@ def main():
     for model_id, model_path in MODELS:
         evaluate_model(model_id, model_path, test_df, device)
 
-    logging.info("\nAll models evaluated. Results in code/eval/results/")
+    logging.info("\nAll models evaluated. Results in " + str(RESULTS_DIR))
 
 
 if __name__ == "__main__":
+    apply_args(parse_args())
     main()

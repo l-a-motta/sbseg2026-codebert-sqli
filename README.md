@@ -37,7 +37,7 @@ Este repositório contém o código-fonte completo do pipeline: compilação do 
         └── compare.py            # consolida resultados e gera as tabelas/figuras do artigo
 ```
 
-Todos os scripts assumem execução a partir da **raiz do repositório** e têm seus parâmetros (caminhos, seeds, batch size, limites de linhas) declarados em constantes no topo de cada arquivo. Cada execução grava um log detalhado em `code/<estágio>/logs/`.
+Todos os scripts assumem execução a partir da **raiz do repositório**. Os parâmetros de execução (caminhos de dataset e de saída, seed, batch size, limites de linhas, modelo) são **configuráveis por flags de linha de comando** — execute qualquer script com `--help` para a lista completa. Os valores padrão (declarados como constantes documentadas no topo de cada arquivo) reproduzem exatamente as execuções do artigo, de modo que rodar sem flags equivale à configuração publicada. Cada execução grava um log detalhado em `code/<estágio>/logs/`.
 
 # Selos considerados
 
@@ -45,7 +45,7 @@ Os selos considerados pelos autores são:
 
 - **Selo D — Artefatos Disponíveis:** código completo neste repositório público e estável, com documentação e licença.
 - **Selo F — Artefatos Funcionais:** dependências documentadas com versões fixadas e teste mínimo executável em CPU em poucos minutos (seção "Teste mínimo").
-- **Selo S — Artefatos Sustentáveis:** código modular por estágio, parâmetros configuráveis no topo de cada script, nomes autoexplicativos e logging detalhado em todas as etapas.
+- **Selo S — Artefatos Sustentáveis:** código modular por estágio, parametrização externa via flags de linha de comando (`--help` em cada script) com padrões que reproduzem o artigo, nomes autoexplicativos e logging detalhado em todas as etapas.
 
 A reprodução integral da claim principal (fine-tuning em 8,86M de linhas) é documentada, mas exige aproximadamente 108 horas de GPU A100 40 GB; por isso o Selo R não é reivindicado. A seção "Experimentos" indica reproduções em escala reduzida para cada claim.
 
@@ -85,7 +85,11 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-# Teste mínimo
+---
+
+# 🟢 Teste mínimo
+
+> **Escopo:** CPU, poucos minutos, sem GPU e sem downloads externos — usa apenas o fixture de 109 linhas incluído no repositório. É tudo o que é necessário para verificar a funcionalidade do artefato (Selo F). Não confundir com os **Experimentos completos** da seção seguinte, que reproduzem as claims do artigo em escala real.
 
 O fixture de 109 linhas reproduz o schema completo do corpus compilado e permite exercitar o pipeline de ponta a ponta em CPU. A partir da raiz do repositório:
 
@@ -106,27 +110,33 @@ Saída esperada do passo 3: métricas (MCC, AUC, F1, acurácia, precisão, revoc
 Opcional (baixa os dois encoders da Hugging Face, alguns minutos em CPU):
 
 ```bash
-python code/eval/linear_probe.py
+python code/eval/linear_probe.py --probe-train-rows 50
 ```
 
-# Experimentos
+O passo 1 (cópia do fixture) atende os scripts que usam o caminho padrão do corpus; alternativamente, qualquer script aceita `--dataset-path code/datasets/fixture/fixture_dataset.csv` diretamente, sem a cópia.
 
-Reprodução das claims do artigo em escala completa. Pré-requisito comum: baixar as dez fontes públicas (links e instruções em `code/datasets/SOURCES.md`) para `code/datasets/raw/` e compilar o corpus:
+---
+
+# 🔴 Experimentos completos
+
+> **Escopo:** reprodução das claims do artigo em escala real — requer baixar ~50 GB de fontes brutas e, para a Claim 1, ~108 horas de GPU A100. **Nenhum passo desta seção é necessário para o teste mínimo acima.**
+
+Pré-requisito comum: baixar as dez fontes públicas (links, nomes de arquivo esperados e instruções em `code/datasets/SOURCES.md`) para `code/datasets/raw/` e compilar o corpus:
 
 ```bash
 python code/compilation/compile.py   # gera code/datasets/compiled/compiled_dataset.csv
 python code/datasets/sanity_check.py # valida contagens: ~12,7M linhas, 75,5% benignas
 ```
 
-**Claim 1 — CodeBERT-SQLi atinge MCC = 0,947 e AUC = 0,971 na partição de teste de 1,9M de consultas** (Tabela 2 do artigo). Reprodução: `python code/fine-tuning/train.py` (ou `train_colab.ipynb` em GPU; ~108 h em A100) seguido de `python code/eval/evaluate.py`. Reprodução em escala reduzida: ajustar `MAX_ROWS_PER_SPLIT` no topo de `train.py` (por exemplo, `100_000`) reduz o treino para horas em GPU modesta, com métricas inferiores às reportadas.
+**Claim 1 — CodeBERT-SQLi atinge MCC = 0,947 e AUC = 0,971 na partição de teste de 1,9M de consultas** (Tabela 2 do artigo). Reprodução: `python code/fine-tuning/train.py --preset codebert-sqli` (ou `train_colab.ipynb` em GPU; ~108 h em A100) seguido de `python code/eval/evaluate.py`. Reprodução em escala reduzida: `python code/fine-tuning/train.py --preset codebert-sqli --max-rows-per-split 100000` reduz o treino para horas em GPU modesta, com métricas inferiores às reportadas.
 
 **Claim 2 — O pré-treinamento em código (ΔMCC = 0,059) contribui mais que o fine-tuning específico (ΔMCC = 0,026)** (Seção 4). Reprodução: `python code/eval/linear_probe.py` treina probes lineares idênticos sobre BERT-base e CodeBERT-base congelados (50 mil linhas do split de treino) e os avalia na partição de teste completa; a diferença entre os dois probes isola o efeito do pré-treinamento. Executável em GPU única em poucas horas.
 
-**Claim 3 — Os baselines tradicionais de ML ficam entre MCC 0,743 e 0,754** (Tabela 2 do artigo). Reprodução: `python code/eval/evaluate_baselines.py` (amostra de treino de 100 mil linhas, avaliação na partição de teste completa; CPU, minutos com o corpus compilado).
+**Claim 3 — Os baselines tradicionais de ML ficam entre MCC 0,743 e 0,754** (Tabela 2 do artigo). Reprodução: `python code/eval/evaluate_baselines.py` (amostra de treino de 100 mil linhas — ajustável via `--max-train-rows` —, avaliação na partição de teste completa; CPU, minutos com o corpus compilado).
 
 Consolidação: `python code/comparison/compare.py` lê os CSVs de `code/eval/results/` e gera as tabelas e figuras comparativas do artigo em `code/comparison/output/`.
 
-Todos os estágios usam a seed fixa 42, declarada no topo de cada script, garantindo splits e amostragens idênticos aos do artigo.
+Todos os estágios usam a seed fixa 42 como padrão (ajustável via `--seed`), garantindo splits e amostragens idênticos aos do artigo quando executados sem flags.
 
 # LICENSE
 

@@ -7,17 +7,23 @@
 #   codebert-sqli       — the product: CodeBERT on the full corpus
 #   bert-sqli-500k      — PP6 control: generic BERT, capped at 500K rows/split
 #   codebert-sqli-500k  — PP6 control: CodeBERT at the same capped budget
-# Select one with apply_preset("<name>") or by editing the config below.
+# Select one with the --preset command-line flag (or apply_preset("<name>")
+# when driving this module from a notebook).
 #
 # Long queries (exceeding 510 content tokens) are split into overlapping
 # 512-token windows (sliding-window strategy, D2.6). Each window is trained
 # as an independent example. During evaluation, per-window predictions are
 # aggregated per query via majority vote.
 #
-# For a quick end-to-end validation before a full run, point DATASET_PATH at
-# the committed fixture (code/datasets/fixture/fixture_dataset.csv) and use a
-# scratch OUTPUT_DIR — same code path, miniature data. See docs/RUNBOOK.md.
+# The configuration constants below are defaults; every one of them can be
+# overridden from the command line without editing this file (see --help):
+#   python code/fine-tuning/train.py --preset codebert-sqli
+#   python code/fine-tuning/train.py --model-name bert-base-uncased --batch-size 32
+# For a quick end-to-end validation before a full run, pass the committed
+# fixture (--dataset-path code/datasets/fixture/fixture_dataset.csv) and a
+# scratch --output-dir — same code path, miniature data. See docs/RUNBOOK.md.
 
+import argparse
 import gc
 import logging
 import time
@@ -111,6 +117,76 @@ def apply_preset(name):
         raise ValueError(f"Unknown preset '{name}'. Available: {sorted(PRESETS)}")
     for key, value in PRESETS[name].items():
         globals()[key] = value
+
+
+# ── Command-line overrides ────────────────────────────────────────────────────
+# The constants above are the defaults used in the article; each flag below
+# overrides one of them for a single run, so no source edit is ever required.
+# --preset is applied first; explicit flags win over the preset.
+
+_UNSET = object()  # distinguishes "flag not given" from any real value
+
+
+def parse_rows_cap(value):
+    """argparse type: a positive integer, or 'all'/'none' meaning no cap."""
+    if str(value).lower() in ("all", "none"):
+        return None
+    return int(value)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Stage 2 — fine-tune a BERT-family encoder on the compiled SQLi dataset.",
+    )
+    parser.add_argument("--preset", choices=sorted(PRESETS), default=None,
+                        help="named training run from the thesis experiment design (D3.7); "
+                             "sets --model-name, --output-dir and --max-rows-per-split")
+    parser.add_argument("--model-name", default=_UNSET,
+                        help=f"HuggingFace encoder to fine-tune (default: {MODEL_NAME})")
+    parser.add_argument("--output-dir", default=_UNSET,
+                        help=f"directory for the best model and checkpoints (default: {OUTPUT_DIR})")
+    parser.add_argument("--max-rows-per-split", default=_UNSET, type=parse_rows_cap,
+                        help="cap on rows loaded per split, or 'all' for no cap (default: all)")
+    parser.add_argument("--dataset-path", default=DATASET_PATH,
+                        help=f"compiled dataset CSV (default: {DATASET_PATH})")
+    parser.add_argument("--batch-size", default=BATCH_SIZE, type=int,
+                        help=f"training batch size (default: {BATCH_SIZE})")
+    parser.add_argument("--epochs", default=EPOCHS, type=int,
+                        help=f"number of training epochs (default: {EPOCHS})")
+    parser.add_argument("--learning-rate", default=LEARNING_RATE, type=float,
+                        help=f"AdamW learning rate (default: {LEARNING_RATE})")
+    parser.add_argument("--undersample-ratio", default=UNDERSAMPLE_RATIO, type=float,
+                        help=f"benign:malicious ratio after undersampling (default: {UNDERSAMPLE_RATIO})")
+    parser.add_argument("--seed", default=RANDOM_SEED, type=int,
+                        help=f"random seed (default: {RANDOM_SEED})")
+    parser.add_argument("--log-dir", default=str(LOG_DIR),
+                        help=f"directory for the DEBUG-level log file (default: {LOG_DIR})")
+    return parser.parse_args()
+
+
+def apply_args(args):
+    """Overwrite the configuration globals with the parsed command-line values."""
+    global MODEL_NAME, OUTPUT_DIR, MAX_ROWS_PER_SPLIT, DATASET_PATH
+    global BATCH_SIZE, EPOCHS, LEARNING_RATE, UNDERSAMPLE_RATIO, RANDOM_SEED, LOG_DIR
+
+    if args.preset is not None:
+        apply_preset(args.preset)
+
+    # Preset-controlled values: only override when the flag was given explicitly.
+    if args.model_name is not _UNSET:
+        MODEL_NAME = args.model_name
+    if args.output_dir is not _UNSET:
+        OUTPUT_DIR = args.output_dir
+    if args.max_rows_per_split is not _UNSET:
+        MAX_ROWS_PER_SPLIT = args.max_rows_per_split
+
+    DATASET_PATH      = args.dataset_path
+    BATCH_SIZE        = args.batch_size
+    EPOCHS            = args.epochs
+    LEARNING_RATE     = args.learning_rate
+    UNDERSAMPLE_RATIO = args.undersample_ratio
+    RANDOM_SEED       = args.seed
+    LOG_DIR           = Path(args.log_dir)
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -719,4 +795,5 @@ def main():
 
 
 if __name__ == "__main__":
+    apply_args(parse_args())
     main()
